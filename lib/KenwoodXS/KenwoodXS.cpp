@@ -1,201 +1,163 @@
-/*
-Kenwood XS System Control
-See XS-Connection.jpg for pinout.
+#include "KenwoodXS.h"
 
-Based on reverse engineering of the protocol done by Olaf Such (ol...@ihf.rwth-aachen.de).
-The following excerpts were taken from de.sci.electronics posts by Olaf from 1997.
-
-"Spezifikationen:
-positive Logik, TTL Pegel, Startbit 15ms, 8Bit daten, danach geht
-CTRL wieder auf 0V"
-
-"The code consists of: CTRL goes High, 2ms later, SDAT goes High for about
-15ms (StartBit), then a Low on SDAT for either approx. 15ms or 7.5ms 
-followed by a High level on SDAT for 7.5ms (FrameSignal)
-then Low again for 15 or 7.5ms, High for 7.5, etc. 8 times all together.
-CTRL then returns to Low."
-*/
-
-/*
-Here are commands for Kenwood KX-3050 cassette deck:
-
-Commands working in both the power-on mode and stand-by mode (in decimal):
-121 - play
->> 112, 113, 115, 117, 122, 123, 125 - stop
-
-Commands working only in the power-on mode (in decimal):
-66 - search next track
-68 - stop
-70 - play if stopped or paused, repeat current song if playing
-72 - record
-74 - search previous track
-76 - pause
-*/
-
-/*
-Here are the commands FROM the Kenwood KR-A5030 Audio/Video Receiver
-These are transmitted from the Kenwood RC-5030 Remote Control Unit
-(in decimal) 
-
-MISC
-Power On 181
-Power Off 185 (same button as above)
-Tuner BAND 123
-Num Pad +10 164
-
-INPUT
-Video 1 122
-Video 2 113
-Tape 1 121
-Tape 2 (toggle on) 20
-Tape 2 (toggle off) 24
-Phono 115
-Tuner 123
-CD 125
-
-TAPE A
->> (fast forward) 67
-[] (stop) 69
-> (play) 71
-* (record) 73
-<< (rewind) 75
-|| (pause) 77
-< (rewind (slow?)) 79
-
-TAPE B
->> 66
-[] 68
-> 70
-* 72
-<< 74
-|| 76
-< 78
-
-CD
->/|| (toggle play or pause) 194
-[] 198
-Disc 174
-
-Below behavior needs to be further investigated but I suspect the receiver is expecting press and hold to scrub >> or << (and >>| or |<< ) and on release, the receiver sends the stop command: 
-<< 169
->> 161
-|<< 200
->>| 192
-Stop scrubbing (release) 177
-
-*/
-
-
-/// Below code is unused by this repository ///
-
-enum {
-  SDAT = 2,
-  CTRL = 3,
-
-  BIT_0 = 15000,
-  BIT_1 = 7500,
-
-  PLAY = 121,
-  STOP1 = 112,
-  STOP2 = 113,
-  STOP3 = 115,
-  STOP4 = 117,
-  STOP5 = 122,
-  STOP6 = 123,
-  STOP7 = 125,
-};
-
-void setup() {
-  Serial.begin(9600);
-  while (!Serial)
-    ;
-
-  // Set-up XS lines
-  pinMode(CTRL, OUTPUT);
-  pinMode(SDAT, OUTPUT);
-  digitalWrite(CTRL, LOW);
-  digitalWrite(SDAT, LOW);
-
-  // Usage
-  Serial.println("Kenwood KX-3050 commands:");
-  Serial.println("  Commands working in both the power-on mode and stand-by mode (in decimal):");
-  Serial.println("    121 - play");
-  Serial.println("    112, 113, 115, 117, 122, 123, 125 - stop");
-  Serial.println("");
-  Serial.println("  Commands working only in the power-on mode (in decimal):");
-  Serial.println("    66 - search next track");
-  Serial.println("    68 - stop");
-  Serial.println("    70 - play if stopped or paused, repeat current song if playing");
-  Serial.println("    72 - record");
-  Serial.println("    74 - search previous track");
-  Serial.println("    76 - pause");
-  Serial.println("");
-  Serial.println("Now type:");
-  Serial.println("  value 0-255 to send the corresponding command,");
-  Serial.println("  value >255 to start a loop to automatically try all commands with delay of 'value' ms.");
+// Create a new KenwoodXS instance
+KenwoodXS::KenwoodXS(int ctrlPin, int sdatPin) : 
+    _ctrlPin(ctrlPin), _sdatPin(sdatPin), _debugOutput(false), _onCommandSentCallback(nullptr) {
 }
 
-void send_byte(byte b) {
-  // StartBit
-  digitalWrite(SDAT, HIGH);
-  delay(15);
-
-  for (byte mask = 0x80; mask; mask >>= 1) {
-    // Bit
-    digitalWrite(SDAT, LOW);
-    if (b & mask)
-      delayMicroseconds(BIT_1);
-    else
-      delayMicroseconds(BIT_0);
-
-    // FrameSignal
-    digitalWrite(SDAT, HIGH);
-    delayMicroseconds(7500);
-  }
+// Initialize the KenwoodXS pins
+void KenwoodXS::begin() {
+    pinMode(_ctrlPin, OUTPUT);
+    pinMode(_sdatPin, OUTPUT);
+    digitalWrite(_ctrlPin, LOW);
+    digitalWrite(_sdatPin, LOW);
 }
 
-void send_command(byte cmd) {
-  Serial.print("Command ");
-  Serial.print(cmd, DEC);
-  Serial.print(" / 0x");
-  Serial.println(cmd, HEX);
-
-  digitalWrite(CTRL, HIGH);
-  delay(2);
-
-  send_byte(cmd);
-
-  // Return to default state
-  digitalWrite(CTRL, LOW);
-  digitalWrite(SDAT, LOW);
-}
-
-void try_all(unsigned long wait) {
-  for (unsigned cmd = 0; cmd < 256; cmd++) {
-    if(cmd == PLAY ||
-      cmd == STOP1 ||
-      cmd == STOP2 ||
-      cmd == STOP3 ||
-      cmd == STOP4 ||
-      cmd == STOP5 ||
-      cmd == STOP6 ||
-      cmd == STOP7) {
-      Serial.println("skipping one uninteresting command");
-      continue;
+// Send a raw command byte
+void KenwoodXS::sendCommand(byte command) {
+    if (_debugOutput) {
+        Serial.print("Sending KenwoodXS command: ");
+        Serial.print(command, DEC);
+        Serial.print(" (0x");
+        Serial.print(command, HEX);
+        Serial.println(")");
     }
-    send_command(byte(cmd));
-    delay(wait);
-  }
+
+    // Set CTRL high to begin transmission
+    digitalWrite(_ctrlPin, HIGH);
+    delay(CTRL_SETUP_DELAY);
+
+    // Send the command byte
+    sendByte(command);
+
+    // Return to default state
+    digitalWrite(_ctrlPin, LOW);
+    digitalWrite(_sdatPin, LOW);
+
+    // Call callback if set
+    if (_onCommandSentCallback) {
+        _onCommandSentCallback(command);
+    }
 }
 
-void loop() {
-  while (Serial.available()) {
-    const long val = Serial.parseInt();
-    if (val < 0)
-      Serial.println("wrong input");
-    else if (val < 256)
-      send_command(byte(val));
-    else
-      try_all((unsigned long)val);
-  }
+// Send a command using the enum
+void KenwoodXS::sendCommand(KenwoodXSCommand command) {
+    sendCommand((byte)command);
+}
+
+// Power control methods
+void KenwoodXS::powerOn() {
+    sendCommand(POWER_ON);
+}
+
+void KenwoodXS::powerOff() {
+    sendCommand(POWER_OFF);
+}
+
+// Input selection method
+void KenwoodXS::selectInput(KenwoodXSCommand input) {
+    switch (input) {
+        case TAPE_1:
+        case TAPE_2_ON:
+        case VIDEO_1:
+        case VIDEO_2:
+        case PHONO:
+        case TUNER:
+        case CD:
+        case CD_START:
+            sendCommand(input);
+            break;
+        default:
+            if (_debugOutput) {
+                Serial.println("Invalid input selection command");
+            }
+            break;
+    }
+}
+
+// Tape A control methods
+void KenwoodXS::playTapeA() {
+    sendCommand(TA_PLAY);
+}
+
+void KenwoodXS::stopTapeA() {
+    sendCommand(TA_STOP);
+}
+
+// Tape B control methods
+void KenwoodXS::playTapeB() {
+    sendCommand(TB_PLAY);
+}
+
+void KenwoodXS::stopTapeB() {
+    sendCommand(TB_STOP);
+}
+
+// CD control methods
+void KenwoodXS::playCD() {
+    sendCommand(CD_PLAY_PAUSE);
+}
+
+void KenwoodXS::stopCD() {
+    sendCommand(CD_STOP);
+}
+
+void KenwoodXS::startCD() {
+    sendCommand(CD_START);
+}
+
+// Try all commands (useful for debugging and discovery)
+void KenwoodXS::tryAllCommands(unsigned long delayMs) {
+    if (_debugOutput) {
+        Serial.println("Testing all KenwoodXS commands...");
+    }
+    
+    for (unsigned cmd = 0; cmd < 256; cmd++) {
+        // Skip some known uninteresting commands based on original code
+        if (cmd == TAPE_1 || cmd == 112 || cmd == 113 || cmd == 115 || 
+            cmd == 117 || cmd == 122 || cmd == 123 || cmd == 125) {
+            if (_debugOutput) {
+                Serial.print("Skipping command ");
+                Serial.println(cmd);
+            }
+            continue;
+        }
+        
+        sendCommand((byte)cmd);
+        delay(delayMs);
+    }
+}
+
+// Set callback for when a command is sent
+void KenwoodXS::onCommandSentCallback(OnCommandSentCallback callback) {
+    _onCommandSentCallback = callback;
+}
+
+// Enable/disable debug output
+void KenwoodXS::setDebugOutput(bool enabled) {
+    _debugOutput = enabled;
+}
+
+// ----- PRIVATE METHODS -----
+
+// Send a byte using the Kenwood XS protocol
+void KenwoodXS::sendByte(byte b) {
+    // Start bit - SDAT high for 15ms
+    digitalWrite(_sdatPin, HIGH);
+    delay(START_BIT_DELAY);
+
+    // Send 8 data bits, MSB first
+    for (byte mask = 0x80; mask; mask >>= 1) {
+        // Data bit - SDAT low for either 15ms (bit 0) or 7.5ms (bit 1)
+        digitalWrite(_sdatPin, LOW);
+        if (b & mask) {
+            delayMicroseconds(BIT_1);  // 7.5ms for bit 1
+        } else {
+            delayMicroseconds(BIT_0);  // 15ms for bit 0
+        }
+
+        // Frame signal - SDAT high for 7.5ms
+        digitalWrite(_sdatPin, HIGH);
+        delayMicroseconds(FRAME_SIGNAL_DELAY);
+    }
 }

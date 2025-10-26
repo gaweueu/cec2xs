@@ -6,8 +6,8 @@
 # define CEC_HIGH 1
 # define CEC_LOW 0
 #else
-# define CEC_HIGH LOW
-# define CEC_LOW HIGH
+# define CEC_HIGH HIGH
+# define CEC_LOW LOW
 #endif
 
 CEC_Device::CEC_Device(int physicalAddress, int in_line, int out_line)
@@ -25,7 +25,7 @@ void CEC_Device::Initialize(CEC_DEVICE_TYPE type)
   gpio_set_mode(digitalPinToPort(_in_line), PIN_MAP[_in_line].gpio_bit, GPIO_OUTPUT_OD); // set open drain output
   _out_line = _in_line;
 #else
-  pinMode(_out_line, OUTPUT);
+  pinMode(_out_line, INPUT);
   pinMode( _in_line,  INPUT);
 #endif  
 

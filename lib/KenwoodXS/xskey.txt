@@ -1,6 +1,3 @@
-from enum import Enum
-
-class XSKey(Enum):
     POWER_ON     = 181
     POWER_OFF    = 185
     BAND         = 123
@@ -41,3 +38,4 @@ class XSKey(Enum):
     CD_NEXT_TRACK   = 192
     CD_PREV_TRACK   = 200
     CD_SCRUB_STOP   = 177
+    CD_START        = 222

@@ -1,12 +1,86 @@
-# KenwoodXS in Python
+# KenwoodXS Arduino Library
 
-## Setup 
+## Overview
 
-`read_data.py` is meant to run on a Raspberry Pi (mine is a Model 2B) and use GPIO pins 23 and 24 for the CTRL (white/left) and SDAT (red/right) signals respectively. I also wired the ground wire on the 3.5 mm cord (headphone/aux cord: see `./data/XS-Connection.jpg`) to a ground GPIO pin on the Raspberry Pi. Please feel free to clone this repo and change those pin numbers to whatever your configuration wishes are!
+The KenwoodXS library provides a simple interface to control Kenwood audio equipment using the proprietary Kenwood XS (System Control) protocol. This library allows Arduino-based projects to send commands to compatible Kenwood receivers, tape decks, and CD players.
 
-## How to Use
+## Hardware Setup
 
-Run `read_data.py` using `python3` on the Linux command line or any Python 3 interpretting interface you have!
+The KenwoodXS protocol uses two signal lines:
+- **CTRL** (Control/White wire): Controls the transmission timing
+- **SDAT** (Serial Data/Red wire): Carries the actual command data
+- **GND** (Ground/Black wire): Common ground connection
+
+Connect these to your Arduino:
+- CTRL pin to a digital output pin (default: pin 3)
+- SDAT pin to a digital output pin (default: pin 2)  
+- Ground wire to Arduino GND
+
+## Usage Example
+
+```cpp
+#include <KenwoodXS.h>
+
+// Create KenwoodXS instance with CTRL on pin 3, SDAT on pin 2
+KenwoodXS kenwood(3, 2);
+
+void setup() {
+    Serial.begin(9600);
+    kenwood.begin();
+    kenwood.setDebugOutput(true);
+}
+
+void loop() {
+    // Power on the receiver
+    kenwood.powerOn();
+    delay(1000);
+    
+    // Select CD input
+    kenwood.selectInput(CD);
+    delay(1000);
+    
+    // Start playing CD
+    kenwood.playCD();
+    delay(5000);
+    
+    // Stop CD
+    kenwood.stopCD();
+    delay(1000);
+}
+```
+
+## API Reference
+
+### Constructor
+- `KenwoodXS(int ctrlPin, int sdatPin)` - Create instance with specified pins
+
+### Setup Methods
+- `begin()` - Initialize the pins and prepare for communication
+- `setDebugOutput(bool enabled)` - Enable/disable debug messages via Serial
+
+### Power Control
+- `powerOn()` - Turn on the receiver
+- `powerOff()` - Turn off the receiver
+
+### Input Selection
+- `selectInput(KenwoodXSCommand input)` - Select input source (CD, TAPE_1, VIDEO_1, etc.)
+
+### Transport Controls
+- `playCD()` - Play/pause CD
+- `startCD()` - Start CD (command 222)
+- `stopCD()` - Stop CD
+- `playTapeA()` - Play Tape A
+- `stopTapeA()` - Stop Tape A
+- `playTapeB()` - Play Tape B  
+- `stopTapeB()` - Stop Tape B
+
+### Raw Commands
+- `sendCommand(byte command)` - Send raw command byte
+- `sendCommand(KenwoodXSCommand command)` - Send command using enum
+- `tryAllCommands(unsigned long delayMs)` - Test all commands for debugging
+
+### Callbacks
+- `onCommandSentCallback(OnCommandSentCallback callback)` - Set callback for when commands are sent
 
 ## Table of Results
 
