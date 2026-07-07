@@ -59,9 +59,13 @@ void cecMessageReceived(int from, int to, unsigned char* data, int len) {
           Serial.println("TV Power ON detected (already on, ignoring)");
         }
       } else if (data[0] == 0x36) {
-        Serial.println("TV Standby detected -> Kenwood OFF");
-        kenwood.powerOff();
-        tvIsOn = false;
+        if (tvIsOn) {
+          Serial.println("TV Standby detected -> Kenwood OFF");
+          kenwood.powerOff();
+          tvIsOn = false;
+        } else {
+          Serial.println("TV Standby detected (already off, ignoring)");
+        }
       }
     }
   }
